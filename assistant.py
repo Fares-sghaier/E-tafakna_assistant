@@ -307,7 +307,7 @@ Ensure your answers are concise, informative, and legal.
                                 for content in event.data.delta.content:
                                     if content.type == 'text':  
                                         buffer += content.text.value
-                                        if buffer.endswith((":", ".", "!", "?")):
+                                        if buffer.endswith("\n\n"):
                                            yield buffer
                                            bufferStorage += buffer
                                            buffer = ""
@@ -322,7 +322,7 @@ Ensure your answers are concise, informative, and legal.
                 yield f"Error: {str(e)}\n"
         
         # Return the stream using `Response` with event-stream type
-        return Response(generate(), content_type="text/plain")
+        return Response(generate(), content_type="text/event-stream")
 
     except Exception as e:
         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)

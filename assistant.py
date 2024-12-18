@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, send_file, url_for
+from flask import Flask, request, Response, send_file, url_for,jsonify
 from flask_cors import CORS
 import logging
 import os
@@ -39,6 +39,13 @@ client = AzureOpenAI(
             api_key=AZURE_OPENAI_API_KEY,
             api_version="2024-05-01-preview"
         )
+
+def store_message(user_id, role, content):
+    """Store messages from user and assistant."""
+    with shelve.open("chat_history.db", writeback=True) as db:
+        if user_id not in db:
+            db[user_id] = [{"user_id": user_id}]
+        db[user_id].append({"role": role, "content": content})
 
 class EventHandler(AssistantEventHandler):    
     @override
@@ -126,6 +133,9 @@ def convert_pdf_to_speech():
 
     except Exception as e:
         return {'error': str(e)}, 500
+    #################################################################
+    #-----------------------------ASSISTANT--------------------------
+    #################################################################
 
 @app.route("/assistant", methods=['POST'])
 def assistant():
@@ -220,109 +230,116 @@ Ensure your answers are concise, informative, and legal."""
         return Response(
             json.dumps({'error': str(e)}, ensure_ascii=False),
             status=500,
+            mimetype='application/json; charset=utf-8')
+##################################################################
+#------------------------Assistant 2.2----------------------------
+##################################################################
+@app.route("/assistantUserID", methods=['POST'])
+def assistantUserID():
+    try:
+        # Get message from request
+        message = request.json.get('message')
+        user_id = request.json.get('user_id')
+        user_name = request.json.get('user_name')
+        if not message:
+            return Response(
+                json.dumps({'error': 'No message provided'}, ensure_ascii=False),
+                status=400,
+                mimetype='application/json; charset=utf-8'
+            )
+        thread_id = check_if_thread_exists(user_id)
+        store_message(user_id, "user", message)
+        if thread_id is None:
+            print(f"Creating new thread for {user_name} with wa_id {user_id}")
+            thread = client.beta.threads.create()
+            store_thread(user_id, thread.id)
+            thread_id = thread.id
+
+    # Otherwise, retrieve the existing thread
+        else:
+            print(f"Retrieving existing thread for {user_name} with wa_id {user_id}")
+            thread = client.beta.threads.retrieve(thread_id)
+            
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=message
+        )
+        
+        # Stream the response using streaming
+        def generate():
+            buffer = "" 
+            bufferStorage = ""
+            try:
+                with client.beta.threads.runs.stream(
+                    thread_id=thread_id,
+                    assistant_id=ASSISTANT_ID,
+                    instructions=f"""You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
+
+Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
+address the user with its name :{user_name}
+You should never generate a full contract, but instead help the user with:
+
+Analyzing contract clauses and suggesting improvements
+Explaining legal terms in simple, understandable language
+Providing guidance for writing or editing specific clauses
+Recommending legal references (e.g., relevant laws or articles)
+Interacting with the user in real-time through chat to guide them through the contract creation process
+Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
+
+Answer all questions in the language that the user uses (e.g., French or English).
+
+You can offer suggestions such as:
+
+Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
+Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
+Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
+Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
+Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
+
+Ensure your answers are concise, informative, and legal.
+""",
+                    max_completion_tokens=1000,
+                    event_handler=EventHandler(),
+                    ) as stream:
+                        for event in stream:
+                            if event.data.object == "thread.message.delta":
+                                for content in event.data.delta.content:
+                                    if content.type == 'text':  
+                                        buffer += content.text.value
+                                        bufferStorage += buffer
+                                        if buffer.endswith((":", ".", "!", "?")):
+                                           yield buffer
+                                           buffer = ""
+                                            
+                store_message(user_id, "assistant", bufferStorage)
+
+                if buffer.strip():
+                    yield buffer                              
+   
+                store_message(user_id, "assistant", bufferStorage)
+
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                yield f"Error: {str(e)}\n"
+        
+        # Return the stream using `Response` with event-stream type
+        return Response(generate(), content_type="text/plain")
+
+    except Exception as e:
+        logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
+        return Response(
+            json.dumps({'error': str(e)}, ensure_ascii=False),
+            status=500,
             mimetype='application/json; charset=utf-8'
         )
 
-
-# @app.route("/assistant", methods=['POST'])
-# def assistant():
-#     try:
-#         # Get message from request
-#         message = request.json.get('message')
-#         user_id = request.json.get('user_id')
-#         user_name = request.json.get('user_name')
-#         if not message:
-#             return Response(
-#                 json.dumps({'error': 'No message provided'}, ensure_ascii=False),
-#                 status=400,
-#                 mimetype='application/json; charset=utf-8'
-#             )
-#         thread_id = check_if_thread_exists(user_id)
-
-#         if thread_id is None:
-#             print(f"Creating new thread for {user_name} with wa_id {user_id}")
-#             thread = client.beta.threads.create()
-#             store_thread(user_id, thread.id)
-#             thread_id = thread.id
-
-#     # Otherwise, retrieve the existing thread
-#         else:
-#             print(f"Retrieving existing thread for {user_name} with wa_id {user_id}")
-#             thread = client.beta.threads.retrieve(thread_id)
-            
-#         client.beta.threads.messages.create(
-#             thread_id=thread_id,
-#             role="user",
-#             content=message
-#         )
-        
-#         # Stream the response using streaming
-#         def generate():
-#             buffer = ""  # Buffer to hold partial words
-#             try:
-#                 with client.beta.threads.runs.stream(
-#                     thread_id=thread_id,
-#                     assistant_id=ASSISTANT_ID,
-#                     instructions="""You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
-
-# Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
-
-# You should never generate a full contract, but instead help the user with:
-
-# Analyzing contract clauses and suggesting improvements
-# Explaining legal terms in simple, understandable language
-# Providing guidance for writing or editing specific clauses
-# Recommending legal references (e.g., relevant laws or articles)
-# Interacting with the user in real-time through chat to guide them through the contract creation process
-# Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
-
-# Answer all questions in the language that the user uses (e.g., French or English).
-
-# You can offer suggestions such as:
-
-# Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
-# Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
-# Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
-# Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
-# Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
-
-# Your responses should always be formatted in HTML for ease of reading and should include:
-
-# Clear headings (e.g., <strong>Clause Explanation</strong>)
-# Bullet points for clarity (<ul><li>...</li></ul>)
-# Sections to break down long answers
-# Use of italics or bold to highlight important points
-# Ensure your answers are concise, informative, and legal.""",
-#                     max_completion_tokens=1000,
-#                     event_handler=EventHandler(),
-#                     ) as stream:
-#                         for event in stream:
-#                             if event.data.object == "thread.message.delta":
-#                                 for content in event.data.delta.content:
-#                                     if content.type == 'text':
-#                                         buffer += content.text.value
-#                                         if buffer.endswith((":", ".", "!", "?")):
-#                                             yield buffer
-#                                             buffer = ""  
-
-#         # After streaming ends, yield any remaining text
-#                 if buffer.strip():
-#                     yield buffer
-
-#             except Exception as e:
-#                 logger.error(f"Streaming error: {str(e)}")
-#                 yield f"Error: {str(e)}\n"
-
-#         # Return the stream using `Response` with event-stream type
-#         return Response(generate(), content_type="text/event-stream")
-
-#     except Exception as e:
-#         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
-#         return Response(
-#             json.dumps({'error': str(e)}, ensure_ascii=False),
-#             status=500,
-#             mimetype='application/json; charset=utf-8'
-#         )
-    
+@app.route("/ChatHistory", methods=['POST'])
+def history():
+    user_id = request.json.get('user_id')
+    with shelve.open("chat_history.db") as db:
+        history = db.get(user_id, [])
+    return jsonify(history)
+  
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=8000)

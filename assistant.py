@@ -277,7 +277,7 @@ def assistantUserID():
                     instructions=f"""You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
 
 Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
-address the user with its name :{user_name}
+
 You should never generate a full contract, but instead help the user with:
 
 Analyzing contract clauses and suggesting improvements
@@ -307,17 +307,15 @@ Ensure your answers are concise, informative, and legal.
                                 for content in event.data.delta.content:
                                     if content.type == 'text':  
                                         buffer += content.text.value
-                                        bufferStorage += buffer
                                         if buffer.endswith((":", ".", "!", "?")):
                                            yield buffer
+                                           bufferStorage += buffer
                                            buffer = ""
                                             
                 store_message(user_id, "assistant", bufferStorage)
 
                 if buffer.strip():
                     yield buffer                              
-   
-                store_message(user_id, "assistant", bufferStorage)
 
             except Exception as e:
                 logger.error(f"Streaming error: {str(e)}")

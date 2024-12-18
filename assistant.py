@@ -44,7 +44,7 @@ def store_message(user_id, role, content):
     """Store messages from user and assistant."""
     with shelve.open("chat_history.db", writeback=True) as db:
         if user_id not in db:
-            db[user_id] = [{"user_id": user_id}]
+            db[user_id] = []
         db[user_id].append({"role": role, "content": content})
 
 class EventHandler(AssistantEventHandler):    
@@ -307,15 +307,13 @@ Ensure your answers are concise, informative, and legal.
                                 for content in event.data.delta.content:
                                     if content.type == 'text':  
                                         buffer += content.text.value
-                                        if buffer.endswith("\n\n"):
+                                        if buffer.endswith((":", ".", "!", "?")):
                                            yield buffer
                                            bufferStorage += buffer
                                            buffer = ""
-                                            
-                store_message(user_id, "assistant", bufferStorage)
-
                 if buffer.strip():
-                    yield buffer                              
+                    yield buffer                            
+                store_message(user_id, "assistant", bufferStorage)                              
 
             except Exception as e:
                 logger.error(f"Streaming error: {str(e)}")

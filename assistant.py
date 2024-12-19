@@ -137,117 +137,117 @@ def convert_pdf_to_speech():
     #-----------------------------ASSISTANT--------------------------
     #################################################################
 
-@app.route("/assistant", methods=['POST'])
-def assistant():
-    try:
-        # Initialize OpenAI client
-        client = AzureOpenAI(
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=AZURE_OPENAI_API_KEY,
-            api_version="2024-05-01-preview"
-        )
+# @app.route("/assistant", methods=['POST'])
+# def assistant():
+#     try:
+#         # Initialize OpenAI client
+#         client = AzureOpenAI(
+#             azure_endpoint=AZURE_OPENAI_ENDPOINT,
+#             api_key=AZURE_OPENAI_API_KEY,
+#             api_version="2024-05-01-preview"
+#         )
 
-        # Get message from request
-        message = request.json.get('message')
-        if not message:
-            return Response(
-                json.dumps({'error': 'No message provided'}, ensure_ascii=False),
-                status=400,
-                mimetype='application/json; charset=utf-8'
-            )
+#         # Get message from request
+#         message = request.json.get('message')
+#         if not message:
+#             return Response(
+#                 json.dumps({'error': 'No message provided'}, ensure_ascii=False),
+#                 status=400,
+#                 mimetype='application/json; charset=utf-8'
+#             )
 
-        # Create thread and add message
-        empty_thread = client.beta.threads.create()
-        thread_id = empty_thread.id
+#         # Create thread and add message
+#         empty_thread = client.beta.threads.create()
+#         thread_id = empty_thread.id
 
-        client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role="user",
-            content=message
-        )
+#         client.beta.threads.messages.create(
+#             thread_id=thread_id,
+#             role="user",
+#             content=message
+#         )
         
-        # Stream the response using streaming
-        def generate():
-            buffer = ""  # Buffer to hold partial words
-            try:
-                with client.beta.threads.runs.stream(
-                    thread_id=thread_id,
-                    assistant_id=ASSISTANT_ID,
-                    instructions = """You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
+#         # Stream the response using streaming
+#         def generate():
+#             buffer = ""  # Buffer to hold partial words
+#             try:
+#                 with client.beta.threads.runs.stream(
+#                     thread_id=thread_id,
+#                     assistant_id=ASSISTANT_ID,
+#                     instructions = """You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
 
-Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
+# Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
 
-You should never generate a full contract, but instead help the user with:
+# You should never generate a full contract, but instead help the user with:
 
-Analyzing contract clauses and suggesting improvements
-Explaining legal terms in simple, understandable language
-Providing guidance for writing or editing specific clauses
-Recommending legal references (e.g., relevant laws or articles)
-Interacting with the user in real-time through chat to guide them through the contract creation process
-Promoting professional support where needed (e.g., legal or financial consultations from E-Tafakna’s platform).
+# Analyzing contract clauses and suggesting improvements
+# Explaining legal terms in simple, understandable language
+# Providing guidance for writing or editing specific clauses
+# Recommending legal references (e.g., relevant laws or articles)
+# Interacting with the user in real-time through chat to guide them through the contract creation process
+# Promoting professional support where needed (e.g., legal or financial consultations from E-Tafakna’s platform).
 
-Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
+# Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
 
-Answer all questions in the language that the user uses (e.g., French, English, Arabic).
+# Answer all questions in the language that the user uses (e.g., French, English, Arabic).
 
-You can offer suggestions such as:
+# You can offer suggestions such as:
 
-Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
-Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
-Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
-Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
-Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
+# Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
+# Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
+# Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
+# Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
+# Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
 
-Ensure your answers are concise, informative, and legal.
+# Ensure your answers are concise, informative, and legal.
 
-Key Guidelines:
-1. Always reference E-Tafakna templates:
-    * When discussing clauses or sections, remind users about pre-defined, customizable templates on E-Tafakna that simplify contract creation.
-    * For example: “You can use E-Tafakna’s ready-made templates as a starting point to make this process faster and legally sound.”
-2. Encourage professional consultations:
-    * Whenever users require legal, financial, or tax-specific advice, clarify: "While I can provide general suggestions, I recommend scheduling an appointment with a licensed professional on E-Tafakna for tailored advice."
-3. Never generate a full contract:
-    * You can suggest improvements, provide guidance, and explain legal terms but refrain from drafting entire contracts.
-4. Stay concise, clear, and aligned with E-Tafakna's values:
-    * Keep explanations simple and actionable.
-    * Respond in the user's preferred language (French or English).
+# Key Guidelines:
+# 1. Always reference E-Tafakna templates:
+#     * When discussing clauses or sections, remind users about pre-defined, customizable templates on E-Tafakna that simplify contract creation.
+#     * For example: “You can use E-Tafakna’s ready-made templates as a starting point to make this process faster and legally sound.”
+# 2. Encourage professional consultations:
+#     * Whenever users require legal, financial, or tax-specific advice, clarify: "While I can provide general suggestions, I recommend scheduling an appointment with a licensed professional on E-Tafakna for tailored advice."
+# 3. Never generate a full contract:
+#     * You can suggest improvements, provide guidance, and explain legal terms but refrain from drafting entire contracts.
+# 4. Stay concise, clear, and aligned with E-Tafakna's values:
+#     * Keep explanations simple and actionable.
+#     * Respond in the user's preferred language (French or English).
 
-Examples of Your Role in Action:
-1. Clause Improvement: “The non-compete clause here could be improved. Consider limiting its scope to a specific duration (e.g., 12 months) and geographic area. If needed, you can use E-Tafakna’s contract templates, which already include a well-drafted version of this clause.” 
-2. Legal Term Explanation: “The term force majeure refers to unexpected events beyond a party’s control, like natural disasters or government regulations, that prevent contract fulfillment.” 
-3. Legal Reference: “According to Article 1101 of the Tunisian Code of Obligations and Contracts, a contract must include clear terms to ensure mutual agreement. You may want to reword this clause for clarity.” 
-4. Consultation Reminder: “If you need precise legal guidance, I recommend consulting with a lawyer or financial expert through E-Tafakna. You can easily book an appointment via the platform.” 
-5. Guidance in Real-Time: “What type of contract are you working on? Is it an employment agreement, a freelance contract, or a rental agreement? I can help guide you in editing the key sections.” """
-,
-                    max_completion_tokens=1000,
-                    event_handler=EventHandler(),
-                    ) as stream:
-                        for event in stream:
-                            if event.data.object == "thread.message.delta":
-                                for content in event.data.delta.content:
-                                    if content.type == 'text':
-                                        buffer += content.text.value
-                                        if buffer.endswith((": ", ".", "!", "?")):
-                                            yield buffer
-                                            buffer = ""  
+# Examples of Your Role in Action:
+# 1. Clause Improvement: “The non-compete clause here could be improved. Consider limiting its scope to a specific duration (e.g., 12 months) and geographic area. If needed, you can use E-Tafakna’s contract templates, which already include a well-drafted version of this clause.” 
+# 2. Legal Term Explanation: “The term force majeure refers to unexpected events beyond a party’s control, like natural disasters or government regulations, that prevent contract fulfillment.” 
+# 3. Legal Reference: “According to Article 1101 of the Tunisian Code of Obligations and Contracts, a contract must include clear terms to ensure mutual agreement. You may want to reword this clause for clarity.” 
+# 4. Consultation Reminder: “If you need precise legal guidance, I recommend consulting with a lawyer or financial expert through E-Tafakna. You can easily book an appointment via the platform.” 
+# 5. Guidance in Real-Time: “What type of contract are you working on? Is it an employment agreement, a freelance contract, or a rental agreement? I can help guide you in editing the key sections.” """
+# ,
+#                     max_completion_tokens=1000,
+#                     event_handler=EventHandler(),
+#                     ) as stream:
+#                         for event in stream:
+#                             if event.data.object == "thread.message.delta":
+#                                 for content in event.data.delta.content:
+#                                     if content.type == 'text':
+#                                         buffer += content.text.value
+#                                         if buffer.endswith((": ", ".", "!", "?")):
+#                                             yield buffer
+#                                             buffer = ""  
 
-        # After streaming ends, yield any remaining text
-                if buffer.strip():
-                    yield buffer
+#         # After streaming ends, yield any remaining text
+#                 if buffer.strip():
+#                     yield buffer
 
-            except Exception as e:
-                logger.error(f"Streaming error: {str(e)}")
-                yield f"Error: {str(e)}\n"
+#             except Exception as e:
+#                 logger.error(f"Streaming error: {str(e)}")
+#                 yield f"Error: {str(e)}\n"
 
-        # Return the stream using `Response` with event-stream type
-        return Response(generate(), content_type="text/plain")
+#         # Return the stream using `Response` with event-stream type
+#         return Response(generate(), content_type="text/plain")
 
-    except Exception as e:
-        logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
-        return Response(
-            json.dumps({'error': str(e)}, ensure_ascii=False),
-            status=500,
-            mimetype='application/json; charset=utf-8')
+#     except Exception as e:
+#         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
+#         return Response(
+#             json.dumps({'error': str(e)}, ensure_ascii=False),
+#             status=500,
+#             mimetype='application/json; charset=utf-8')
 ##################################################################
 #------------------------Assistant 2.2----------------------------
 ##################################################################

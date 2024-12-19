@@ -334,7 +334,7 @@ Ensure your answers are concise, informative, and legal.
 
             except Exception as e:
                 logger.error(f"Streaming error: {str(e)}")
-                yield f"Error: {str(e)}\n"
+                yield "I'm sorry, there was an error processing your request. Please try again.\n"
         
         # Return the stream using `Response` with event-stream type
         return Response(generate(), content_type="text/event-stream")
@@ -342,7 +342,7 @@ Ensure your answers are concise, informative, and legal.
     except Exception as e:
         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
         return Response(
-            json.dumps({'error': str(e)}, ensure_ascii=False),
+            json.dumps({'error': "I'm sorry, there was an unexpected issue. Please try again later."}, ensure_ascii=False),
             status=500,
             mimetype='application/json; charset=utf-8'
         )

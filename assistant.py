@@ -15,7 +15,7 @@ from langdetect import detect
 import uuid
 import shelve
 
-# Initialize Flask app
+
 app = Flask(__name__)
 CORS(app)
 # ------------------------------------------------------

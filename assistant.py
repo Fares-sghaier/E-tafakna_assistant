@@ -42,7 +42,7 @@ client = AzureOpenAI(
 
 def store_message(user_id, role, content):
     """Store messages from user and assistant."""
-    with shelve.open("chat_history.db", writeback=True) as db:
+    with shelve.open("chat_history1.db", writeback=True) as db:
         if user_id not in db:
             db[user_id] = []
         db[user_id].append({"role": role, "content": content})

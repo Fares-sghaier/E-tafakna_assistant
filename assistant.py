@@ -14,10 +14,22 @@ from gtts import gTTS
 from langdetect import detect
 import uuid
 import shelve
-
-
+from flask import Flask, request, jsonify
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+import time
+from cloudinary.utils import cloudinary_url
+# Initialize Flask App
 app = Flask(__name__)
-CORS(app)
+
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name="dcscfcsdfrefrefreferfersdfersdf",      
+    api_key="616522747539686",            
+    api_secret="Zhxc4E-R4e_qWurs-wvKu6Ry3Cw",      
+)
+
 # ------------------------------------------------------
 #                      Assistant
 # ------------------------------------------------------
@@ -101,153 +113,159 @@ def serve_audio(audio_id):
 
 @app.route('/convert', methods=['POST'])
 def convert_pdf_to_speech():
+    """Convert PDF text to speech and store audio on Cloudinary with expiration."""
     try:
+        # Get PDF URL from the request
         pdf_url = request.form.get('pdf_url')
         if not pdf_url:
-            return {'error': 'PDF URL is required'}, 400
+            return jsonify({'error': 'PDF URL is required'}), 400
 
+        # Download the PDF
         response = requests.get(pdf_url)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to download PDF'}), 400
+        
+        # Load PDF content
         pdf_content = io.BytesIO(response.content)
-
         pdf_reader = PyPDF2.PdfReader(pdf_content)
         full_text = "".join(page.extract_text() for page in pdf_reader.pages)
 
+        # Check if text was extracted
         if not full_text:
-            return {'error': 'Could not extract text from PDF'}, 400
+            return jsonify({'error': 'Could not extract text from PDF'}), 400
 
-        detected_lang = detect(full_text[:50])
+        # Detect language of the text
+        detected_lang = detect(full_text[:50])  # Detect based on the first 50 characters
         lang = detected_lang if detected_lang in ['ar', 'fr', 'en'] else 'en'
 
+        # Convert text to speech
         mp3_fp = io.BytesIO()
         gTTS(text=full_text, lang=lang).write_to_fp(mp3_fp)
         mp3_fp.seek(0)
 
-        audio_id = str(uuid.uuid4())
-        temp_audio_store[audio_id] = mp3_fp
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload_large(
+            file=mp3_fp,
+            resource_type="video",  # Audio files are treated as videos in Cloudinary
+            folder="temporary_audios",
+            use_filename=True,
+            unique_filename=False,
+        )
 
-        audio_url = url_for('serve_audio', audio_id=audio_id, _external=True, _scheme='https')
+        # Get the public_id of the uploaded file
+        public_id = upload_result.get('public_id')
 
-        return {
-            'mp3_url': audio_url,
-        }
+        # Generate a signed URL with 1-hour expiration
+        signed_url, options = cloudinary_url(
+            public_id,
+            resource_type="video",
+            sign_url=True,
+            expires_at=int(time.time() + 3600),  # 1-hour expiration
+        )
+
+        # Return the signed URL
+        return jsonify({'mp3_url': signed_url})
 
     except Exception as e:
-        return {'error': str(e)}, 500
+        return jsonify({'error': str(e)}), 500
     #################################################################
     #-----------------------------ASSISTANT--------------------------
     #################################################################
 
-# @app.route("/assistant", methods=['POST'])
-# def assistant():
-#     try:
-#         # Initialize OpenAI client
-#         client = AzureOpenAI(
-#             azure_endpoint=AZURE_OPENAI_ENDPOINT,
-#             api_key=AZURE_OPENAI_API_KEY,
-#             api_version="2024-05-01-preview"
-#         )
+@app.route("/assistant", methods=['POST'])
+def assistant():
+    try:
+        # Initialize OpenAI client
+        client = AzureOpenAI(
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version="2024-05-01-preview"
+        )
 
-#         # Get message from request
-#         message = request.json.get('message')
-#         if not message:
-#             return Response(
-#                 json.dumps({'error': 'No message provided'}, ensure_ascii=False),
-#                 status=400,
-#                 mimetype='application/json; charset=utf-8'
-#             )
+        # Get message from request
+        message = request.json.get('message')
+        if not message:
+            return Response(
+                json.dumps({'error': 'No message provided'}, ensure_ascii=False),
+                status=400,
+                mimetype='application/json; charset=utf-8'
+            )
 
-#         # Create thread and add message
-#         empty_thread = client.beta.threads.create()
-#         thread_id = empty_thread.id
+        # Create thread and add message
+        empty_thread = client.beta.threads.create()
+        thread_id = empty_thread.id
 
-#         client.beta.threads.messages.create(
-#             thread_id=thread_id,
-#             role="user",
-#             content=message
-#         )
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=message
+        )
         
-#         # Stream the response using streaming
-#         def generate():
-#             buffer = ""  # Buffer to hold partial words
-#             try:
-#                 with client.beta.threads.runs.stream(
-#                     thread_id=thread_id,
-#                     assistant_id=ASSISTANT_ID,
-#                     instructions = """You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
+        # Stream the response using streaming
+        def generate():
+            buffer = ""  # Buffer to hold partial words
+            try:
+                with client.beta.threads.runs.stream(
+                    thread_id=thread_id,
+                    assistant_id=ASSISTANT_ID,
+                    instructions = """You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
 
-# Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
+            Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
+            You should never generate a full contract, but instead help the user with:
 
-# You should never generate a full contract, but instead help the user with:
+Analyzing contract clauses and suggesting improvements
+Explaining legal terms in simple, understandable language
+Providing guidance for writing or editing specific clauses
+Recommending legal references (e.g., relevant laws or articles)
+Interacting with the user in real-time through chat to guide them through the contract creation process
+Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
+Answer all questions in the language that the user uses (e.g., French or English).
 
-# Analyzing contract clauses and suggesting improvements
-# Explaining legal terms in simple, understandable language
-# Providing guidance for writing or editing specific clauses
-# Recommending legal references (e.g., relevant laws or articles)
-# Interacting with the user in real-time through chat to guide them through the contract creation process
-# Promoting professional support where needed (e.g., legal or financial consultations from E-Tafakna’s platform).
+You can offer suggestions such as:
 
-# Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
+Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
+Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
+Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
+Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
+Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
 
-# Answer all questions in the language that the user uses (e.g., French, English, Arabic).
+Your responses should always be formatted in HTML for ease of reading and should include:
 
-# You can offer suggestions such as:
+Clear headings (e.g., <strong>Clause Explanation</strong>)
+Bullet points for clarity (<ul><li>...</li></ul>)
+Sections to break down long answers
+Use of italics or bold to highlight important points
+Ensure your answers are concise, informative, and legal."""
+,
+                    max_completion_tokens=1000,
+                    event_handler=EventHandler(),
+                    ) as stream:
+                        for event in stream:
+                            if event.data.object == "thread.message.delta":
+                                for content in event.data.delta.content:
+                                    if content.type == 'text':
+                                        buffer += content.text.value
+                                        if buffer.endswith((": ", ".", "!", "?")):
+                                            yield buffer
+                                            buffer = ""  
 
-# Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
-# Clause Improvement: Suggest rewording or additions to clauses to make them more precise, fair, and legally sound.
-# Legal References: When necessary, refer to applicable laws or regulations and provide the exact articles, including simple explanations of how they relate to the user’s contract.
-# Guidance in Real-Time: Ask clarifying questions to better understand the user's needs and guide them through the process of drafting, reviewing, or improving their contract.
-# Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
+        # After streaming ends, yield any remaining text
+                if buffer.strip():
+                    yield buffer
 
-# Ensure your answers are concise, informative, and legal.
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                yield f"Error: {str(e)}\n"
 
-# Key Guidelines:
-# 1. Always reference E-Tafakna templates:
-#     * When discussing clauses or sections, remind users about pre-defined, customizable templates on E-Tafakna that simplify contract creation.
-#     * For example: “You can use E-Tafakna’s ready-made templates as a starting point to make this process faster and legally sound.”
-# 2. Encourage professional consultations:
-#     * Whenever users require legal, financial, or tax-specific advice, clarify: "While I can provide general suggestions, I recommend scheduling an appointment with a licensed professional on E-Tafakna for tailored advice."
-# 3. Never generate a full contract:
-#     * You can suggest improvements, provide guidance, and explain legal terms but refrain from drafting entire contracts.
-# 4. Stay concise, clear, and aligned with E-Tafakna's values:
-#     * Keep explanations simple and actionable.
-#     * Respond in the user's preferred language (French or English).
+        # Return the stream using `Response` with event-stream type
+        return Response(generate(), content_type="text/plain")
 
-# Examples of Your Role in Action:
-# 1. Clause Improvement: “The non-compete clause here could be improved. Consider limiting its scope to a specific duration (e.g., 12 months) and geographic area. If needed, you can use E-Tafakna’s contract templates, which already include a well-drafted version of this clause.” 
-# 2. Legal Term Explanation: “The term force majeure refers to unexpected events beyond a party’s control, like natural disasters or government regulations, that prevent contract fulfillment.” 
-# 3. Legal Reference: “According to Article 1101 of the Tunisian Code of Obligations and Contracts, a contract must include clear terms to ensure mutual agreement. You may want to reword this clause for clarity.” 
-# 4. Consultation Reminder: “If you need precise legal guidance, I recommend consulting with a lawyer or financial expert through E-Tafakna. You can easily book an appointment via the platform.” 
-# 5. Guidance in Real-Time: “What type of contract are you working on? Is it an employment agreement, a freelance contract, or a rental agreement? I can help guide you in editing the key sections.” """
-# ,
-#                     max_completion_tokens=1000,
-#                     event_handler=EventHandler(),
-#                     ) as stream:
-#                         for event in stream:
-#                             if event.data.object == "thread.message.delta":
-#                                 for content in event.data.delta.content:
-#                                     if content.type == 'text':
-#                                         buffer += content.text.value
-#                                         if buffer.endswith((": ", ".", "!", "?")):
-#                                             yield buffer
-#                                             buffer = ""  
-
-#         # After streaming ends, yield any remaining text
-#                 if buffer.strip():
-#                     yield buffer
-
-#             except Exception as e:
-#                 logger.error(f"Streaming error: {str(e)}")
-#                 yield f"Error: {str(e)}\n"
-
-#         # Return the stream using `Response` with event-stream type
-#         return Response(generate(), content_type="text/plain")
-
-#     except Exception as e:
-#         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
-#         return Response(
-#             json.dumps({'error': str(e)}, ensure_ascii=False),
-#             status=500,
-#             mimetype='application/json; charset=utf-8')
+    except Exception as e:
+        logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
+        return Response(
+            json.dumps({'error': str(e)}, ensure_ascii=False),
+            status=500,
+            mimetype='application/json; charset=utf-8')
 ##################################################################
 #------------------------Assistant 2.2----------------------------
 ##################################################################
@@ -264,7 +282,7 @@ def assistantUserID():
                 status=400,
                 mimetype='application/json; charset=utf-8'
             )
-        thread_id = check_if_thread_exists(user_id)
+        thread_id = check_if_thread_exists(user_id) 
         store_message(user_id, "user", message)
         if thread_id is None:
             print(f"Creating new thread for {user_name} with wa_id {user_id}")
@@ -292,7 +310,6 @@ def assistantUserID():
                     thread_id=thread_id,
                     assistant_id=ASSISTANT_ID,
                     instructions=f"""You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
-
 Your role is to help users understand and improve their contracts. You will provide suggestions to enhance specific clauses, explain legal terms in simple language, and ensure the contract is aligned with legal standards. You must also provide relevant legal references (such as articles of law) when necessary and guide the user in creating legally sound contracts.
 
 You should never generate a full contract, but instead help the user with:
@@ -334,7 +351,7 @@ Ensure your answers are concise, informative, and legal.
 
             except Exception as e:
                 logger.error(f"Streaming error: {str(e)}")
-                yield "I'm sorry, there was an error processing your request. Please try again.\n"
+                yield f"Error: {str(e)}\n"
         
         # Return the stream using `Response` with event-stream type
         return Response(generate(), content_type="text/event-stream")
@@ -342,7 +359,7 @@ Ensure your answers are concise, informative, and legal.
     except Exception as e:
         logger.error(f"Error in assistant route: {str(e)}", exc_info=True)
         return Response(
-            json.dumps({'error': "I'm sorry, there was an unexpected issue. Please try again later."}, ensure_ascii=False),
+            json.dumps({'error': str(e)}, ensure_ascii=False),
             status=500,
             mimetype='application/json; charset=utf-8'
         )

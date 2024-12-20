@@ -13,7 +13,8 @@ RUN pip install Flask \
     requests \
     PyPDF2 \
     gTTS \
-    langdetect
+    langdetect \
+    cloudinary
 
 # Expose the port Flask will run on
 

@@ -160,9 +160,9 @@ def convert_pdf_to_speech():
             public_id,
             resource_type="video",
             sign_url=True,
+            secure=True,
             expires_at=int(time.time() + 3600),  # 1-hour expiration
         )
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  ",signed_url)
 
         # Return the signed URL
         return jsonify({'mp3_url': signed_url})

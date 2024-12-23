@@ -5,6 +5,6 @@ openai
 typing-extensions
 requests
 PyPDF2
-gTTS
+edge_tts
 langdetect
 cloudinary

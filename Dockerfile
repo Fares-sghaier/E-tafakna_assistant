@@ -12,7 +12,7 @@ RUN pip install Flask \
     typing-extensions \
     requests \
     PyPDF2 \
-    gTTS \
+    edge_tts \
     langdetect \
     cloudinary
 

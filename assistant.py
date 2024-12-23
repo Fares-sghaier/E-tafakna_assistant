@@ -121,6 +121,7 @@ def convert_pdf_to_speech():
             return jsonify({'error': 'PDF URL is required'}), 400
 
         # Download the PDF
+        time.sleep(2) 
         response = requests.get(pdf_url)
         if response.status_code != 200:
             return jsonify({'error': 'Failed to download PDF'}), 400
@@ -142,7 +143,7 @@ def convert_pdf_to_speech():
         mp3_fp = io.BytesIO()
         gTTS(text=full_text, lang=lang).write_to_fp(mp3_fp)
         mp3_fp.seek(0)
-
+        time.sleep(1)
         # Upload to Cloudinary
         upload_result = cloudinary.uploader.upload_large(
             file=mp3_fp,
@@ -154,7 +155,7 @@ def convert_pdf_to_speech():
 
         # Get the public_id of the uploaded file
         public_id = upload_result.get('public_id')
-
+        time.sleep(1)
         # Generate a signed URL with 1-hour expiration
         signed_url, options = cloudinary_url(
             public_id,

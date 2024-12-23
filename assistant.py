@@ -10,15 +10,15 @@ from openai import AssistantEventHandler
 import PyPDF2
 import requests
 import io
-from gtts import gTTS
-from langdetect import detect
-import uuid
+from langdetect import detect, LangDetectException
+import asyncio
 import shelve
 from flask import Flask, request, jsonify
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 import time
+import edge_tts
 from cloudinary.utils import cloudinary_url
 # Initialize Flask App
 app = Flask(__name__)
@@ -54,7 +54,7 @@ client = AzureOpenAI(
 
 def store_message(user_id, role, content):
     """Store messages from user and assistant."""
-    with shelve.open("chat_history.db", writeback=True) as db:
+    with shelve.open("chat_history1.db", writeback=True) as db:
         if user_id not in db:
             db[user_id] = []
         db[user_id].append({"role": role, "content": content})
@@ -96,80 +96,141 @@ def store_thread(user_id, thread_id):
 # ------------------------------------------------------------
 # In-memory store for temporary audio files
 temp_audio_store = {}
+MAX_TEXT_SIZE = 1000000  # 1MB
+REQUEST_TIMEOUT = 30  # seconds
+MAX_RETRIES = 3
 
-@app.route('/audio/<audio_id>')
-def serve_audio(audio_id):
-    """Serve audio from the in-memory store."""
-    audio_fp = temp_audio_store.get(audio_id)
-    if audio_fp:
-        audio_fp.seek(0)  # Reset the pointer
-        return send_file(
-            audio_fp,
-            mimetype="audio/mpeg",
-            as_attachment=True,
-            download_name="audio.mp3",
-        )
-    return {"error": "Audio file not found"}, 404
+# Voice mapping for different languages
+VOICE_MAPPING = {
+    'en': 'en-US-ChristopherNeural',
+    'fr': 'fr-FR-HenriNeural',
+    'ar': 'ar-SA-HamedNeural'
+}
+def detect_language(text):
+    """Detect the language of the text."""
+    try:
+        lang = detect(text)
+        return lang if lang in VOICE_MAPPING else 'en'
+    except LangDetectException:
+        logger.warning("Language detection failed, defaulting to English")
+        return 'en'
+def download_pdf(url):
+    """Download PDF with retries and timeout."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.get(url, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            return io.BytesIO(response.content)
+        except requests.RequestException as e:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+            time.sleep(1)
+
+async def process_text_to_speech(text, voice):
+    """Convert text to speech using edge-tts with specified voice."""
+    try:
+        # Create a temporary file path
+        temp_file = f"temp_audio_{int(time.time())}.mp3"
+        
+        # Initialize communicate with the specified voice
+        communicate = edge_tts.Communicate(text, voice)
+        
+        # Save to file
+        await communicate.save(temp_file)
+        
+        # Read the generated file
+        with open(temp_file, 'rb') as audio_file:
+            audio_data = io.BytesIO(audio_file.read())
+        
+        # Clean up
+        os.remove(temp_file)
+        return audio_data
+    except Exception as e:
+        logger.error(f"Text to speech conversion failed: {e}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise
 
 @app.route('/convert', methods=['POST'])
 def convert_pdf_to_speech():
-    """Convert PDF text to speech and store audio on Cloudinary with expiration."""
+    """Convert PDF text to speech using edge-tts."""
     try:
-        # Get PDF URL from the request
+        # Get PDF URL from request
         pdf_url = request.form.get('pdf_url')
         if not pdf_url:
             return jsonify({'error': 'PDF URL is required'}), 400
 
-        # Download the PDF
-        time.sleep(2) 
-        response = requests.get(pdf_url)
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to download PDF'}), 400
+        logger.info(f"Processing PDF from URL: {pdf_url}")
+
+        # Download PDF
+        try:
+            pdf_content = download_pdf(pdf_url)
+        except requests.RequestException as e:
+            return jsonify({'error': f'Failed to download PDF: {str(e)}'}), 400
+
+        # Extract text from PDF
+        try:
+            pdf_reader = PyPDF2.PdfReader(pdf_content)
+            full_text = ""
+            for page in pdf_reader.pages:
+                full_text += page.extract_text()
+        except Exception as e:
+            return jsonify({'error': f'Failed to extract text from PDF: {str(e)}'}), 400
+
+        # Validate extracted text
+        if not full_text.strip():
+            return jsonify({'error': 'No text could be extracted from PDF'}), 400
+
+        if len(full_text) > MAX_TEXT_SIZE:
+            return jsonify({'error': 'PDF text exceeds maximum size limit'}), 400
+
+        # Detect language and get appropriate voice
+        detected_lang = detect_language(full_text)
+        voice = VOICE_MAPPING.get(detected_lang, VOICE_MAPPING['en'])
         
-        # Load PDF content
-        pdf_content = io.BytesIO(response.content)
-        pdf_reader = PyPDF2.PdfReader(pdf_content)
-        full_text = "".join(page.extract_text() for page in pdf_reader.pages)
-
-        # Check if text was extracted
-        if not full_text:
-            return jsonify({'error': 'Could not extract text from PDF'}), 400
-
-        # Detect language of the text
-        detected_lang = detect(full_text[:50])  # Detect based on the first 50 characters
-        lang = detected_lang if detected_lang in ['ar', 'fr', 'en'] else 'en'
+        logger.info(f"Detected language: {detected_lang}, using voice: {voice}")
+        logger.info(f"Extracted {len(full_text)} characters from PDF")
 
         # Convert text to speech
-        mp3_fp = io.BytesIO()
-        gTTS(text=full_text, lang=lang).write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        time.sleep(1)
+        try:
+            # Run async function in synchronous context
+            audio_data = asyncio.run(process_text_to_speech(full_text, voice))
+        except Exception as e:
+            return jsonify({'error': f'Text to speech conversion failed: {str(e)}'}), 500
+
         # Upload to Cloudinary
-        upload_result = cloudinary.uploader.upload_large(
-            file=mp3_fp,
-            resource_type="video",  # Audio files are treated as videos in Cloudinary
-            folder="temporary_audios",
-            use_filename=True,
-            unique_filename=False,
-        )
+        try:
+            upload_result = cloudinary.uploader.upload_large(
+                file=audio_data,
+                resource_type="video",
+                folder="temporary_audios",
+                timeout=REQUEST_TIMEOUT
+            )
+        except Exception as e:
+            return jsonify({'error': f'Failed to upload audio: {str(e)}'}), 500
 
-        # Get the public_id of the uploaded file
-        public_id = upload_result.get('public_id')
-        time.sleep(1)
-        # Generate a signed URL with 1-hour expiration
-        signed_url, options = cloudinary_url(
-            public_id,
-            resource_type="video",
-            sign_url=True,
-            secure=True,
-            expires_at=int(time.time() + 3600),  # 1-hour expiration
-        )
+        # Generate signed URL
+        try:
+            signed_url, _ = cloudinary_url(
+                upload_result['public_id'],
+                resource_type="video",
+                sign_url=True,
+                secure=True,
+                expires_at=int(time.time() + 3600)  # URL expires in 1 hour
+            )
+        except Exception as e:
+            return jsonify({'error': f'Failed to generate signed URL: {str(e)}'}), 500
 
-        # Return the signed URL
-        return jsonify({'mp3_url': signed_url})
+        return jsonify({
+            'mp3_url': signed_url,
+            #'detected_language': detected_lang
+        })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Unexpected error in convert_pdf_to_speech: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
     #################################################################
     #-----------------------------ASSISTANT--------------------------
     #################################################################

@@ -22,7 +22,7 @@ import edge_tts
 from cloudinary.utils import cloudinary_url
 # Initialize Flask App
 app = Flask(__name__)
-
+CORS(app)
 # Configure Cloudinary
 cloudinary.config(
     cloud_name="dcscfcsdfrefrefreferfersdfersdf",      

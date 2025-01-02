@@ -124,7 +124,7 @@ MAX_TEXT_SIZE = 1000000  # 1MB
 REQUEST_TIMEOUT = 30  # seconds
 MAX_RETRIES = 3
 
-
+# Voice mapping for different languages
 VOICE_MAPPING = {
     'en': 'en-US-ChristopherNeural',
     'fr': 'fr-FR-HenriNeural',
@@ -556,6 +556,20 @@ def history():
     with shelve.open(chat_history_path) as db:
         history = db.get(user_id, [])
     return jsonify(history)
-  
+@app.route("/ChatHistoryAdmin", methods=['GET'])
+def historyAdmin():
+    """Fetch all chat histories."""
+    # Define the path to the shelve database
+    chat_history_path = os.path.join('/mnt/chat_history', 'chat_history')
+
+    # Initialize a dictionary to store all chat histories
+    all_history = {}
+
+    # Open the shelve database and retrieve all data
+    with shelve.open(chat_history_path) as db:
+        for user_id, messages in db.items():
+            all_history[user_id] = messages
+
+    return jsonify(all_history)
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=8000)

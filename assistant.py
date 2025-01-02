@@ -54,7 +54,8 @@ client = AzureOpenAI(
 
 def store_message(user_id, role, content):
     """Store messages from user and assistant."""
-    with shelve.open("chat_history", writeback=True) as db:
+    chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
+    with shelve.open(chat_history_path, writeback=True) as db:
         if user_id not in db:
             db[user_id] = []
         db[user_id].append({"role": role, "content": content})
@@ -526,7 +527,8 @@ Ensure your answers are concise, informative, and legal.
 @app.route("/ChatHistory", methods=['POST'])
 def history():
     user_id = request.json.get('user_id')
-    with shelve.open("chat_history") as db:
+    chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
+    with shelve.open(chat_history_path) as db:
         history = db.get(user_id, [])
     return jsonify(history)
   

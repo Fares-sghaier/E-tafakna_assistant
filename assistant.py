@@ -140,7 +140,7 @@ async def process_text_to_speech(text, voice):
         # Save to file
         await communicate.save(temp_file)
         
-        # Read the generated file
+       
         with open(temp_file, 'rb') as audio_file:
             audio_data = io.BytesIO(audio_file.read())
         

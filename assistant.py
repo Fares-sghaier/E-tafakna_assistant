@@ -124,7 +124,7 @@ MAX_TEXT_SIZE = 1000000  # 1MB
 REQUEST_TIMEOUT = 30  # seconds
 MAX_RETRIES = 3
 
-# Voice mapping for different languages
+
 VOICE_MAPPING = {
     'en': 'en-US-ChristopherNeural',
     'fr': 'fr-FR-HenriNeural',

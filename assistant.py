@@ -223,8 +223,7 @@ def convert_pdf_to_speech():
             return jsonify({'error': f'Failed to generate signed URL: {str(e)}'}), 500
 
         return jsonify({
-            'mp3_url': signed_url,
-            #'detected_language': detected_lang
+            'mp3_url': signed_url
         })
 
     except Exception as e:

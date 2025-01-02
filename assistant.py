@@ -236,7 +236,7 @@ def convert_pdf_to_speech():
 @app.route("/assistantweb", methods=['POST'])
 def assistantweb():
     try:
-        # Get message from request
+        
         message = request.json.get('message')
         user_id = request.json.get('user_id')
         user_name = request.json.get('user_name')

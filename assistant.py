@@ -267,7 +267,6 @@ def assistantweb():
             content=message
         )
         
-        # Stream the response using streaming
         def generate():
             buffer = "" 
             bufferStorage = ""

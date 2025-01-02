@@ -31,7 +31,7 @@ cloudinary.config(
 )
 
 # ------------------------------------------------------
-#                      Assistant
+#                      Assistant ggg
 # ------------------------------------------------------
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)

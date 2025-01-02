@@ -163,7 +163,6 @@ def convert_pdf_to_speech():
 
         logger.info(f"Processing PDF from URL: {pdf_url}")
 
-        # Download PDF
         try:
             pdf_content = download_pdf(pdf_url)
         except requests.RequestException as e:

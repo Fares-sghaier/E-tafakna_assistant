@@ -241,6 +241,7 @@ def assistantweb():
         user_id = request.json.get('user_id')
         user_name = request.json.get('user_name')
         contract = request.json.get('contract')
+        country = request.json.get('country')
         if not message:
             return Response(
                 json.dumps({'error': 'No message provided'}, ensure_ascii=False),
@@ -284,9 +285,8 @@ Providing guidance for writing or editing specific clauses
 Recommending legal references (e.g., relevant laws or articles)
 Interacting with the user in real-time through chat to guide them through the contract creation process
 Important Reminder: Whenever discussing contracts, always remind the user that E-Tafakna offers pre-defined contract templates that can help simplify the process. Also, when providing legal or financial advice, be sure to clarify that you are not a licensed lawyer or accountant and recommend scheduling an appointment with a professional through the platform for more in-depth advice.
-
 Answer all questions in the language that the user uses (e.g., French or English).
-
+The user cannot attach or send a file.
 You can offer suggestions such as:
 
 Legal Terminology Explanation: Provide simple definitions or examples for complex legal terms.
@@ -296,7 +296,7 @@ Guidance in Real-Time: Ask clarifying questions to better understand the user's 
 Legal Consultation Reminder: If the user requires more specific legal advice or if they ask for consultations, remind them that while you can provide guidance and suggestions, you are not a licensed lawyer or accountant. For more detailed, professional advice, they should book a consultation with an expert on E-Tafakna.
 
 Ensure your answers are concise, informative, and legal.
-this is the contract: {contract}
+this is the contract: {contract} should follow the laws of {country}
 """,
                     max_completion_tokens=1000,
                     event_handler=EventHandler(),

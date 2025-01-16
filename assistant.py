@@ -52,13 +52,36 @@ client = AzureOpenAI(
             api_version="2024-05-01-preview"
         )
 
+# def store_message(user_id, role, content):
+#     """Store messages from user and assistant."""
+#     chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
+#     with shelve.open(chat_history_path, writeback=True) as db:
+#         if user_id not in db:
+#             db[user_id] = []
+#         db[user_id].append({"role": role, "content": content})
+
 def store_message(user_id, role, content):
     """Store messages from user and assistant."""
-    chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
-    with shelve.open(chat_history_path, writeback=True) as db:
-        if user_id not in db:
-            db[user_id] = []
-        db[user_id].append({"role": role, "content": content})
+    chat_history_dir = '/mnt/chat_history'
+    
+    # Ensure the directory exists
+    try:
+        os.makedirs(chat_history_dir, exist_ok=True)
+    except Exception as e:
+        raise Exception(f"Failed to create or access the directory: {chat_history_dir}. Error: {e}")
+    
+    # Define the shelve file path
+    chat_history_path = os.path.join(chat_history_dir, 'chat_history')
+    
+    # Open the shelve file and write data
+    try:
+        with shelve.open(chat_history_path, writeback=True) as db:
+            if user_id not in db:
+                db[user_id] = []
+            db[user_id].append({"role": role, "content": content})
+    except Exception as e:
+        raise Exception(f"Failed to open or write to the shelve database: {chat_history_path}. Error: {e}")
+
 
 class EventHandler(AssistantEventHandler):    
     @override
@@ -527,10 +550,26 @@ Ensure your answers are concise, informative, and legal.
 @app.route("/ChatHistory", methods=['POST'])
 def history():
     user_id = request.json.get('user_id')
-    chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
+    # chat_history_path = os.path.join(os.path.dirname(__file__), 'chat_history', 'chat_history')
+    chat_history_path = os.path.join('/mnt/chat_history', 'chat_history')
+
     with shelve.open(chat_history_path) as db:
         history = db.get(user_id, [])
     return jsonify(history)
-  
+@app.route("/ChatHistoryAdmin", methods=['GET'])
+def historyAdmin():
+    """Fetch all chat histories."""
+    # Define the path to the shelve database
+    chat_history_path = os.path.join('/mnt/chat_history', 'chat_history')
+
+    # Initialize a dictionary to store all chat histories
+    all_history = {}
+
+    # Open the shelve database and retrieve all data
+    with shelve.open(chat_history_path) as db:
+        for user_id, messages in db.items():
+            all_history[user_id] = messages
+
+    return jsonify(all_history)
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=8000)

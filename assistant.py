@@ -295,6 +295,7 @@ def assistantweb():
             bufferStorage = ""
             try:
                 with client.beta.threads.runs.stream(
+                    model="gpt-4",
                     thread_id=thread_id,
                     assistant_id=ASSISTANT_ID,
                     instructions=f"""You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
@@ -389,6 +390,7 @@ def assistant():
             buffer = ""  # Buffer to hold partial words
             try:
                 with client.beta.threads.runs.stream(
+                    model="gpt-4",
                     thread_id=thread_id,
                     assistant_id=ASSISTANT_ID,
                     instructions = """You are Elyssa, an AI assistant for E-Tafakna, a comprehensive platform for customizable legal documents, online consultations, and seamless contract management.
@@ -556,6 +558,8 @@ def history():
     with shelve.open(chat_history_path) as db:
         history = db.get(user_id, [])
     return jsonify(history)
+
+
 @app.route("/ChatHistoryAdmin", methods=['GET'])
 def historyAdmin():
     """Fetch all chat histories."""
